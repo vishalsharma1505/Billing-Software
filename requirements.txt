@@ -1,2 +1,5 @@
 Flask
 num2words
+reportlab
+qrcode[pil]
+
