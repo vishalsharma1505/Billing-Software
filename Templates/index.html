@@ -1,0 +1,92 @@
+@app.route('/print_invoice/<int:invoice_id>')
+def print_invoice(invoice_id):
+    COMPANY_NAME = "INetwork Hub Pvt. Ltd."
+    COMPANY_ADDRESS = "123, Main Street, Kolkata"
+    COMPANY_PHONE = "+91 9065860876"
+    COMPANY_EMAIL = "info@inetworkhub.com"
+    COMPANY_LOGO = "/static/logo.png"  # Local logo in static folder
+
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+    c.execute('''SELECT invoices.id, customers.name, customers.phone, customers.email, customers.address,
+                 invoices.date
+                 FROM invoices LEFT JOIN customers ON invoices.customer_id = customers.id
+                 WHERE invoices.id=?''', (invoice_id,))
+    invoice = c.fetchone()
+
+    c.execute('''SELECT items.name, invoice_items.qty, items.price
+                 FROM invoice_items LEFT JOIN items ON invoice_items.item_id = items.id
+                 WHERE invoice_items.invoice_id=?''', (invoice_id,))
+    items = c.fetchall()
+    conn.close()
+
+    subtotal = sum(it[2]*it[1] for it in items)
+    gst_amount = subtotal * GST_PERCENT / 100
+    grand_total = subtotal + gst_amount
+
+    html = f"""
+    <html>
+    <head>
+    <style>
+    body {{ font-family: Arial, sans-serif; margin: 20px; }}
+    .header {{ display:flex; align-items:center; margin-bottom:20px; }}
+    .logo {{ width:120px; height:60px; margin-right:20px; }}
+    .company-details {{ font-size:14px; }}
+    .bill-to {{ margin-top:20px; border:1px solid #ddd; padding:10px; width:50%; }}
+    table {{ width:100%; border-collapse: collapse; margin-top:20px; }}
+    table, th, td {{ border:1px solid #000; }}
+    th, td {{ padding:8px; text-align:left; }}
+    .totals {{ margin-top:10px; float:right; width:40%; }}
+    </style>
+    </head>
+    <body>
+
+    <!-- Header with logo and company details -->
+    <div class="header">
+        <img src="{COMPANY_LOGO}" class="logo">
+        <div class="company-details">
+            <strong>{COMPANY_NAME}</strong><br>
+            {COMPANY_ADDRESS}<br>
+            {COMPANY_PHONE} | {COMPANY_EMAIL}
+        </div>
+    </div>
+
+    <!-- Bill To section -->
+    <div class="bill-to">
+        <strong>Bill To:</strong><br>
+        {invoice[1]}<br>
+        {invoice[4]}<br>
+        {invoice[2]} | {invoice[3]}<br>
+        <strong>Invoice Date:</strong> {invoice[5]}<br>
+        <strong>Invoice No:</strong> {invoice[0]}
+    </div>
+
+    <!-- Items table -->
+    <table>
+        <tr><th>Item</th><th>Qty</th><th>Price (₹)</th><th>Total (₹)</th><th>GST (₹)</th></tr>
+    """
+    for it in items:
+        line_total = it[2]*it[1]
+        line_gst = line_total * GST_PERCENT / 100
+        html += f"<tr><td>{it[0]}</td><td>{it[1]}</td><td>{it[2]:.2f}</td><td>{line_total:.2f}</td><td>{line_gst:.2f}</td></tr>"
+
+    html += f"""
+    </table>
+
+    <!-- Totals -->
+    <div class="totals">
+        <p><strong>Subtotal:</strong> ₹{subtotal:.2f}</p>
+        <p><strong>GST ({GST_PERCENT}%):</strong> ₹{gst_amount:.2f}</p>
+        <h3>Grand Total: ₹{grand_total:.2f}</h3>
+    </div>
+
+    <!-- Thank you and print button -->
+    <div style="clear:both; margin-top:50px;">
+        <em>Thank you for your business!</em>
+    </div>
+    <button onclick="window.print()" style="margin-top:20px;">Print</button>
+
+    </body>
+    </html>
+    """
+    return html
