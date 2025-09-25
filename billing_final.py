@@ -327,6 +327,8 @@ def delete_invoice():
 # ---------------- Print Invoice ----------------
 @app.route('/print_invoice/<int:invoice_id>')
 def print_invoice(invoice_id):
+    import qrcode, base64, io
+
     COMPANY_NAME = "INetwork Hub Pvt. Ltd."
     COMPANY_ADDRESS = "123, Main Street, Kolkata"
     COMPANY_PHONE = "+91 9065860876"
@@ -365,6 +367,15 @@ def print_invoice(invoice_id):
 
     CUSTOMER_GSTIN = invoice[5] if invoice[5] else "N/A"
 
+    # ---------- Generate QR Code ----------
+    upi_id = "8319432026@ybl"
+    upi_url = f"upi://pay?pa={upi_id}&pn={COMPANY_NAME}&am={grand_total:.2f}&cu=INR&tn=Invoice {invoice_number}"
+    qr = qrcode.make(upi_url)
+    buf = io.BytesIO()
+    qr.save(buf, format="PNG")
+    qr_base64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+
+    # ---------- HTML ----------
     html = f"""
     <html>
     <head>
@@ -379,10 +390,11 @@ def print_invoice(invoice_id):
     table, th, td {{ border:1px solid #000; }}
     th, td {{ padding:8px; text-align:left; }}
     .totals {{ margin-top:20px; width:100%; }}
-    .signature {{ margin-top:20px; text-align:right; }}
-    .footer {{ margin-top:40px; display:flex; justify-content:space-between; }}
-    .bank-details {{ font-size:14px; }}
-    .nospacing {{ letter-spacing:0; word-spacing:0; white-space:nowrap; }}
+    .footer {{ margin-top:40px; display:flex; justify-content:space-between; align-items:flex-start; }}
+    .qr-box {{ text-align:center; }}
+    .qr-box img {{ width:160px; height:160px; border:1px solid #000; padding:5px; }}
+    .bank-details {{ font-size:14px; margin-top:20px; }}
+    .signature {{ text-align:right; }}
     </style>
     </head>
     <body>
@@ -393,7 +405,7 @@ def print_invoice(invoice_id):
             <strong>{COMPANY_NAME}</strong><br>
             {COMPANY_ADDRESS}<br>
             {COMPANY_PHONE} | {COMPANY_EMAIL}<br>
-            <strong class="nospacing">GSTIN:</strong> {COMPANY_GSTIN}
+            <strong>GSTIN:</strong> {COMPANY_GSTIN}
         </div>
     </div>
 
@@ -403,14 +415,14 @@ def print_invoice(invoice_id):
             {COMPANY_NAME}<br>
             {COMPANY_ADDRESS}<br>
             {COMPANY_PHONE} | {COMPANY_EMAIL}<br>
-            <strong class="nospacing">GSTIN:</strong> {COMPANY_GSTIN}
+            <strong>GSTIN:</strong> {COMPANY_GSTIN}
         </div>
         <div class="bill-to">
             <strong>Bill To:</strong><br>
             {invoice[1]}<br>
             {invoice[4]}<br>
             {invoice[2]} | {invoice[3]}<br>
-            <strong class="nospacing">GSTIN:</strong> {CUSTOMER_GSTIN}<br>
+            <strong>GSTIN:</strong> {CUSTOMER_GSTIN}<br>
             <strong>Invoice Date:</strong> {invoice[6]}<br>
             <strong>Due Date:</strong> {due_date.strftime("%Y-%m-%d")}<br>
             <strong>Invoice No:</strong> {invoice_number}
@@ -422,7 +434,6 @@ def print_invoice(invoice_id):
             <th>Item</th><th>Qty</th><th>Price (₹)</th><th>Total (₹)</th><th>GST (₹)</th>
         </tr>
     """
-    # items rows
     for it in items:
         line_total = it[2] * it[1]
         line_gst = line_total * GST_PERCENT / 100
@@ -436,7 +447,6 @@ def print_invoice(invoice_id):
         </tr>
         """
 
-    # totals & signature
     html += f"""
     </table>
 
@@ -447,20 +457,28 @@ def print_invoice(invoice_id):
         <p><em>In Words: {amount_words}</em></p>
     </div>
 
-    <div class="signature">
-        <div style="border:1px solid #000; padding:15px; width:220px; text-align:center; display:inline-block; margin-left:auto;">
-            Authorized Signatory
-            <br><br>
-            _______________
-        </div>
-    </div>
-
+    <!-- Footer with QR, Bank & Signature -->
     <div class="footer">
-        <div class="bank-details">
-            <strong>Bank Details:</strong><br>
-            Bank: {BANK_NAME}<br>
-            A/C: {ACCOUNT_NUMBER}<br>
-            IFSC: {IFSC_CODE}
+        <div class="qr-box">
+            <h4>Scan & Pay</h4>
+            <img src="data:image/png;base64,{qr_base64}">
+            <p><strong>{COMPANY_NAME}</strong><br>
+            UPI ID: {upi_id}</p>
+
+            <div class="bank-details">
+                <strong>Bank Details:</strong><br>
+                Bank: {BANK_NAME}<br>
+                A/C: {ACCOUNT_NUMBER}<br>
+                IFSC: {IFSC_CODE}
+            </div>
+        </div>
+
+        <div class="signature">
+            <div style="border:1px solid #000; padding:15px; width:220px; text-align:center;">
+                Authorized Signatory
+                <br><br>
+                _______________
+            </div>
         </div>
     </div>
 
@@ -473,6 +491,8 @@ def print_invoice(invoice_id):
     </html>
     """
     return html
+
+
 
 # ---------------- Export CSV ----------------
 @app.route('/export_csv')
@@ -498,4 +518,3 @@ def export_csv():
 if __name__ == "__main__":
     init_db()
     app.run(host="0.0.0.0", port=10000, debug=True)
-
